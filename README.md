@@ -27,3 +27,26 @@ Example Code
 	sender = DexcellSender(gateway='yourgateway')
 	print server.insertDexcellServiceMessage(message)
 
+
+============================================================
+Installing
+============================================================
+
+	git clone git://github.com/jsoucheiron/dexcell-python.git
+	cd dexcell-python
+	python setup.py install
+
+============================================================
+License
+============================================================
+
+dexcell-python is built on top of code developed from:
+	* Dexma Sensors S.L.
+
+The software is released under the BSD License
+
+============================================================
+Contact
+============================================================
+
+You may address your questions at support@dexmatech.com 
