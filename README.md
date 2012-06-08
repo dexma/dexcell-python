@@ -40,8 +40,7 @@ Installing
 License
 ============================================================
 
-dexcell-python is built on top of code developed from:
-	* Dexma Sensors S.L.
+dexcell-python has been developed by Dexma Sensors S.L.
 
 The software is released under the BSD License
 
