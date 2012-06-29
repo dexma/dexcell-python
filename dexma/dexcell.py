@@ -134,8 +134,7 @@ class DexcellSender(object):
                 'serviceNetworkId': int(serviceMessage.service), 
                 'value': float(serviceMessage.value),
                 'seqNum': int(serviceMessage.seqnum),
-                'timeStamp': time.strftime("%Y-%m-%dT%H:%M:%S.000 " + timezone, serviceMessage.timestamp),
-                'checksum': '15478'
+                'timeStamp': time.strftime("%Y-%m-%dT%H:%M:%S.000 " + timezone, serviceMessage.timestamp)
             }
         data = {
                 'gatewayId': self.__gateway,
@@ -156,8 +155,7 @@ class DexcellSender(object):
                             'serviceNetworkId': int(serviceMessage.service), 
                             'value': float(serviceMessage.value),
                             'seqNum': int(serviceMessage.seqnum),
-                            'timeStamp': time.strftime("%Y-%m-%dT%H:%M:%S.000 " + timezone, serviceMessage.timestamp),
-                            'checksum': '15478'
+                            'timeStamp': time.strftime("%Y-%m-%dT%H:%M:%S.000 " + timezone, serviceMessage.timestamp)
                         }
             readings.append(reading)
         data = {

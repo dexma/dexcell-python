@@ -20,12 +20,16 @@ Features
 ============================================================
 Example Code
 ============================================================
-
+	import time
 	from dexma.dexcell import DexcellSender, DexcellServiceMessage
 	
 	message = DexcellServiceMessage(node=1,service=401,timestamp=time.localtime(),value=1001.23,seq=1)
 	sender = DexcellSender(gateway='yourgateway')
-	print server.insertDexcellServiceMessage(message)
+	result =  sender.insertDexcellServiceMessage(message)
+	if result == (200,'OK'):
+		print "Insert OK"
+	else:
+		print "Insert failed"
 
 
 ============================================================
