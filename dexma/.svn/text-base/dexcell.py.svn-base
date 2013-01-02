@@ -124,8 +124,7 @@ class DexcellSender(object):
     DEFAULT_GATEWAY = 'None'
     DEFAULT_LOGGERNAME = 'DexcellSender'
     
-    def __init__(self, gateway=DEFAULT_GATEWAY, loggerName=DEFAULT_LOGGERNAME, logfile=DEFAULT_LOGFILE, loglevel=DEFAULT_LOGLEVEL, server=DEFAULT_SERVER, url=DEFAULT_URL, https=True):
-        self.__https = https
+    def __init__(self, gateway=DEFAULT_GATEWAY, loggerName=DEFAULT_LOGGERNAME, logfile=DEFAULT_LOGFILE, loglevel=DEFAULT_LOGLEVEL, server=DEFAULT_SERVER, url=DEFAULT_URL):
         self.__server = server
         self.__url = url
         self.__gateway = gateway
@@ -165,10 +164,7 @@ class DexcellSender(object):
         """
         params = 'data='+data
         headers = {"Content-type": "application/x-www-form-urlencoded","Accept": "text/plain"}
-        if self.__https:
-            conn = httplib.HTTPSConnection(self.__server)        
-        else:            
-            conn = httplib.HTTPConnection(self.__server)        
+        conn = httplib.HTTPConnection(self.__server)        
         conn.request("POST", self.__url, params, headers)
         
         error = True

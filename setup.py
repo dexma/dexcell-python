@@ -26,12 +26,14 @@
 #SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from distutils.core import setup
-setup(name='dexcell-python',
-      version='0.1',
+setup(name='dexcell',
+      version='0.2.0',
       packages=['dexma'],
       description="DEXCell Energy Manager HTTP/JSON insert API for python",
       author='Jordi Soucheiron',
       author_email="jsoucheiron@dexmatech.com",
-      url="www.dexmatech.com",
+      url="https://github.com/jsoucheiron/dexcell-python/",
+      classifiers = [
+                     ],
       license="BSD"
       )
