@@ -187,7 +187,7 @@ class DexcellSender(object):
         self.__logger.debug('[ LOG '+self.__gateway+' ]['+ str(datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"))+'] status: '+ str(response.status)+ ' result '+ response.getheader('data'))
         return response.status, response.getheader('data')
 
-    def insertDexcellServiceMessage(self,serviceMessage,timezone='UTC'):
+    def insertDexcellServiceMessage(self,serviceMessage,timezone='UTC',extraparams={}):
         '''Insert a single DexcellServiceMessage
         
         '''
@@ -202,11 +202,13 @@ class DexcellSender(object):
                 'gatewayId': self.__gateway,
                 'service': [ reading ]
                 }
+        for key in extraparams.keys():
+            data[key] = extraparams[key]  
         result = self.__insertRawJSONData(json.dumps(data))
         return result
 
 
-    def insertDexcellServiceMessages(self, serviceMessageIterator, timezone='UTC'):
+    def insertDexcellServiceMessages(self, serviceMessageIterator, timezone='UTC',extraparams={}):
         """ Insert many DexcellServiceMessages at once
         
         """
@@ -224,5 +226,8 @@ class DexcellSender(object):
                 'gatewayId': self.__gateway,
                 'service': readings
                 }
+        for key in extraparams.keys():
+            data[key] = extraparams[key]            
         result = self.__insertRawJSONData(json.dumps(data))
         return result
+
