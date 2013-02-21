@@ -26,11 +26,11 @@
 #SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import time
-import datetime
 import httplib
 import json
 import logging
-from logging.handlers import RotatingFileHandler 
+import sys
+from logging import StreamHandler
     
 class DexcellServiceMessage(object):
     
@@ -132,7 +132,7 @@ class DexcellSender(object):
         self.__logger = logging.getLogger(loggerName)
         if len(self.__logger.handlers) == 0:
             self.__logger.setLevel(loglevel)
-            self.handler = RotatingFileHandler(logfile, maxBytes=204800, backupCount=10)
+            self.handler = StreamHandler(sys.stdout)
             self.handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
             self.__logger.addHandler(self.handler)   
         
@@ -148,9 +148,9 @@ class DexcellSender(object):
         self.__logger = logging.getLogger(loggerName)
         if len(self.__logger.handlers) == 0:
             self.__logger.setLevel(loglevel)
-            self.handler = RotatingFileHandler(logfile, maxBytes=204800, backupCount=10)
+            self.handler = StreamHandler(sys.stdout)
             self.handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-            self.__logger.addHandler(self.handler)
+            self.__logger.addHandler(self.handler) 
             
     def changeGateway(self, gateway):
         """Change the gateway mac that will be sent
@@ -182,9 +182,8 @@ class DexcellSender(object):
                 maxerror = maxerror + 1
                 time.sleep(1)
                 if maxerror > 10:
-                    return ( -1, 'FAIL' )
-                
-        self.__logger.debug('[ LOG '+self.__gateway+' ]['+ str(datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"))+'] status: '+ str(response.status)+ ' result '+ response.getheader('data'))
+                    return ( -1, 'FAIL' )                
+        self.__logger.debug("Insert from %s with status = %s and result = %s " % (self.__gateway,str(response.status),str(response.getheader())))
         return response.status, response.getheader('data')
 
     def insertDexcellServiceMessage(self,serviceMessage,timezone='UTC',extraparams={}):
