@@ -27,7 +27,7 @@
 
 from distutils.core import setup
 setup(name='dexcell',
-      version='0.2.2',
+      version='0.2.3',
       packages=['dexma'],
       description="DEXCell Energy Manager HTTP/JSON insert API for python",
       author='Jordi Soucheiron',
