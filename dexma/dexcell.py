@@ -183,7 +183,7 @@ class DexcellSender(object):
                 time.sleep(1)
                 if maxerror > 10:
                     return ( -1, 'FAIL' )                
-        self.__logger.debug("Insert from %s with status = %s and result = %s " % (self.__gateway,str(response.status),str(response.getheader())))
+        self.__logger.debug("Insert from %s with status = %s and result = %s " % (self.__gateway,str(response.status),str(response.getheader('data'))))
         return response.status, response.getheader('data')
 
     def insertDexcellServiceMessage(self,serviceMessage,timezone='UTC',extraparams={}):
