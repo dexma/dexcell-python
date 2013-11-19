@@ -23,10 +23,10 @@ Example Code
 	import time
 	from dexma.dexcell import DexcellSender, DexcellServiceMessage
 	
-	message = DexcellServiceMessage(node=1,service=401,timestamp=time.gmtime(),value=1001.23,seq=1)
+	message = DexcellServiceMessage(node=1, service=401,i timestamp=time.gmtime(), value=1001.23, seq=1)
 	sender = DexcellSender(gateway='yourgateway')
 	result =  sender.insertDexcellServiceMessage(message)
-	if result == (200,'OK'):
+	if result == (200, 'OK'):
 		print "Insert OK"
 	else:
 		print "Insert failed"

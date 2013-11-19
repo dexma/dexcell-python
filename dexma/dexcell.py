@@ -30,7 +30,15 @@ import time
 import httplib
 import json
 import logging
-from logging import NullHandler
+
+try:
+    from logging import NullHandler
+except ImportError:
+    class NullHandler(logging.Handler):
+        def emit(self, record):
+            pass
+    logging.NullHandler = NullHandler
+    from logging import NullHandler
 
 
 class DexcellLoggingHandler(logging.Handler):
@@ -38,7 +46,7 @@ class DexcellLoggingHandler(logging.Handler):
     A class which sends records to a DEXCell Energy manager server,
     """
 
-    def __init__(self, gateway, token, host='www.dexcell.com',
+    def __init__(self, gateway, token, host='www.dexcell.com', port=80,
                  url='/api/v2/gateway/log/set/'):
         """
         Initialize the instance with the host, the request URL and token
@@ -47,6 +55,7 @@ class DexcellLoggingHandler(logging.Handler):
         self.gateway = gateway
         self.token = token
         self.host = host
+        self.port = port
         self.url = url
         self.method = 'POST'
 
@@ -78,20 +87,22 @@ class DexcellLoggingHandler(logging.Handler):
             dexcellmsgdict['ts'] = time.strftime('%Y%m%d%H%M%S', ts)
             jsondexcellmsg = json.dumps(dexcellmsgdict)
             host = self.host
-            h = httplib.HTTP(host)
+            port = self.port
+            h = httplib.HTTPConnection(host, port, timeout=10.0)
             url = self.url + self.gateway
-            h.putrequest(self.method, url)
             # support multiple hosts on one IP address...
             # need to strip optional :port from host, if present
             i = host.find(":")
             if i >= 0:
                 host = host[:i]
-            h.putheader("Host", host)
-            h.putheader("Content-type", "application/json")
-            h.putheader("Content-length", str(len(jsondexcellmsg)))
-            h.putheader('x-dexcell-token', str(self.token))
-            h.endheaders(jsondexcellmsg)
-            h.getreply()    # can't do anything with the result
+            headers = {
+                "Host": host,
+                "Content-type": "application/json",
+                "Content-length": str(len(jsondexcellmsg)),
+                'x-dexcell-token': str(self.token)
+            }
+            h.request(self.method, url, jsondexcellmsg, headers)
+            h.getresponse()                                                     # can't do anything with the result
         except (KeyboardInterrupt, SystemExit):
             raise
         except:
@@ -169,9 +180,10 @@ class DexcellServiceMessage(object):
             raise Exception("Problem creating DexcellServiceMessage")
 
     def __repr__(self):
+        timeformat = "%Y/%m/%d %H:%M"
         outPut = "DexcellServiceMessage(node=%s" % str(self.node)
         outPut += ", service=%s" % str(self.service)
-        outPut += ", timestamp=%s" % str(self.timestamp)
+        outPut += ", timestamp=%s" % time.strftime(timeformat, self.timestamp)
         outPut += ", value=%s" % str(self.value)
         outPut += ", seqnum=%s)" % str(self.seqnum)
         return outPut
@@ -320,3 +332,4 @@ class DexcellSender(object):
             data[key] = extraparams[key]
         result = self.__insertRawJSONData(json.dumps(data))
         return result
+
