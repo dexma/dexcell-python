@@ -27,12 +27,12 @@
 
 from distutils.core import setup
 setup(name='dexcell',
-      version='0.4.0',
+      version='0.4.1',
       packages=['dexma'],
       description="DEXCell Energy Manager HTTP/JSON REST API for python",
       author='Jordi Soucheiron',
       author_email="jsoucheiron@dexmatech.com",
-      url="https://github.com/jsoucheiron/dexcell-python/",
+      url="https://github.com/dexma/dexcell-python/",
       classifiers=[
         'Development Status :: 5 - Production/Stable',
         'Environment :: Web Environment',
