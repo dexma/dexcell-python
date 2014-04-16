@@ -1,7 +1,7 @@
 #!/usr/bin/python
 #coding: utf-8
 
-#Copyright (c) 2013, Dexma Sensors S.L. (info@dexmatech.com)
+#Copyright (c) 2014, Dexma Sensors S.L. (info@dexmatech.com)
 #All rights reserved.
 #
 #Redistribution and use in source and binary forms, with or without
@@ -26,10 +26,15 @@
 #(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 #SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import time
+
 import httplib
 import json
 import logging
+import re
+import time
+import urllib2
+from datetime import datetime
+
 
 try:
     from logging import NullHandler
@@ -46,8 +51,8 @@ class DexcellLoggingHandler(logging.Handler):
     A class which sends records to a DEXCell Energy manager server,
     """
 
-    def __init__(self, gateway, token, host='www.dexcell.com', port=80,
-                 url='/api/v2/gateway/log/set/'):
+    def __init__(self, gateway, token, host='www.dexcell.com', port=0,
+                 url='/api/v2/gateway/log/set/', https=True):
         """
         Initialize the instance with the host, the request URL and token
         """
@@ -55,9 +60,15 @@ class DexcellLoggingHandler(logging.Handler):
         self.gateway = gateway
         self.token = token
         self.host = host
-        self.port = port
         self.url = url
         self.method = 'POST'
+        self.https = https
+        if port == 0:
+            if https:
+                port = 443
+            else:
+                port = 80
+        self.port = port
 
     def mapLogRecord(self, record):
         """
@@ -88,7 +99,10 @@ class DexcellLoggingHandler(logging.Handler):
             jsondexcellmsg = json.dumps(dexcellmsgdict)
             host = self.host
             port = self.port
-            h = httplib.HTTPConnection(host, port, timeout=10.0)
+            if self.https:
+                h = httplib.HTTPSConnection(host, port, timeout=10.0)
+            else:
+                h = httplib.HTTPConnection(host, port, timeout=10.0)
             url = self.url + self.gateway
             # support multiple hosts on one IP address...
             # need to strip optional :port from host, if present
@@ -176,8 +190,8 @@ class DexcellServiceMessage(object):
             self.timestamp = timestamp
             self.value = float(value)
             self.seqnum = int(seq)
-        except:
-            raise Exception("Problem creating DexcellServiceMessage")
+        except Exception as e:
+            raise Exception("Problem creating DexcellServiceMessage " + e.message)
 
     def __repr__(self):
         timeformat = "%Y/%m/%d %H:%M"
@@ -332,4 +346,379 @@ class DexcellSender(object):
             data[key] = extraparams[key]
         result = self.__insertRawJSONData(json.dumps(data))
         return result
+
+
+class DexcellRestApiError(Exception):
+    def __init__(self, error_type, description, info):
+        self.type = error_type
+        self.description = description
+        self.info = info
+
+    def __str__(self):
+        return repr("%s:%s(%s)" % (self.type, self.description, self.info))
+
+
+class DexcellRestApiAuth(object):
+    """
+        Class for authentification in Dexcell
+        software.
+    """
+    def __init__(self, endpoint, hash_dexma, secret, logger_name="dexcell_rest_api_auth"):
+        self.endpoint = endpoint
+        self.hash = hash_dexma
+        self.secret = secret
+        self.logger = logging.getLogger(logger_name)
+        if len(self.logger.handlers) == 0:
+            self.logger.setLevel(logging.INFO)
+            self.handler = NullHandler()
+            h_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            self.handler.setFormatter(logging.Formatter(h_format))
+            self.logger.addHandler(self.handler)
+
+    def _json_date_handler(self, obj):
+        return obj.isoformat() if hasattr(obj, 'isoformat') else obj
+
+    def _datetime_parser(self, dct):
+        DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
+        strp = datetime.strptime
+        for k, v in dct.items():
+            if isinstance(v, basestring) and re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", v):
+                try:
+                    dct[k] = strp(v, DATE_FORMAT)
+                except ValueError:
+                    pass
+        return dct
+
+    def _call_rest(self, url):
+        url = self.endpoint + url
+        req = urllib2.Request(url)
+        response = urllib2.urlopen(req)
+        data = response.read()
+        self.logger.info(data)
+        return data
+
+    def perm_token(self, temp_token):
+        ''' obtain permanent token for oauth authentication'''
+        url = "/oauth/accesstoken?temp_token=%s&secret=%s&idclient=%s" % (str(temp_token), self.secret, self.hash)
+        response = self._call_rest(url)
+        return response
+
+    def set_key_value(self, key, value):
+        "Set this key with this value in the key-value data store"
+        url = self.endpoint + "/things/set/" + key
+        req = urllib2.Request(url, json.dumps(value, default=self._json_date_handler),
+                              headers={'x-dexcell-secret': self.secret})
+        self.logger.info('storing key: %s with secret: %s' % (key, self.secret))
+        response = urllib2.urlopen(req)
+        data = response.read()
+        return data
+
+    def get_key(self, key):
+        "Get this key from the key-value data store"
+        url = "%s/things/get/%s" % (self.endpoint, key)
+        req = urllib2.Request(url, headers={'x-dexcell-secret': self.secret})
+        response = urllib2.urlopen(req)
+        data = response.read()
+        data = json.loads(data, object_hook=self._datetime_parser)
+        result = json.loads(data['result'], object_hook=self._datetime_parser)
+        return result
+
+
+class DexcellRestApi(object):
+
+    """
+        class with all the utils API calls available group by
+        from deployment calls, location calls and devide calls.
+    """
+
+    def __init__(self, endpoint, token, logger_name="dexcell_rest_api"):
+        self.endpoint = endpoint
+        self.token = token
+        self.logger = logging.getLogger(logger_name)
+        if len(self.logger.handlers) == 0:
+            self.logger.setLevel(logging.INFO)
+            self.handler = NullHandler()
+            h_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            self.handler.setFormatter(logging.Formatter(h_format))
+            self.logger.addHandler(self.handler)
+
+    def _json_date_handler(self, obj):
+        return obj.isoformat() if hasattr(obj, 'isoformat') else obj
+
+    def _datetime_parser(self, dct):
+        DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
+        for k, v in dct.items():
+            if isinstance(v, basestring) and re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", v):
+                try:
+                    dct[k] = datetime.strptime(v, DATE_FORMAT)
+                except:
+                    pass
+        return dct
+
+    def dxdate(self, dt):
+        """ convert datetime into default date string format used in dexcell api calls """
+        return dt.strftime("%Y%m%d%H%M%S")
+
+    def _call_rest(self, url, payload=None, parse_response=True):
+        url = self.endpoint + url
+        self.logger.info('url:%s token:%s' % (url, self.token))
+        if payload is None:
+            req = urllib2.Request(url, headers={'x-dexcell-token': self.token})
+        else:
+            req = urllib2.Request(url, payload, headers={'x-dexcell-token': self.token})
+        try:
+            response = urllib2.urlopen(req, timeout=600.0)
+            data = response.read()
+            if parse_response:
+                return json.loads(data)
+            else:
+                return data
+        except urllib2.HTTPError as httperror:
+
+            info = json.loads(httperror.read())
+
+            if httperror.code == 404:
+                self.logger.error('error: not found')
+                raise DexcellRestApiError('NOTFOUND', info['description'], info['moreInfo'])
+            elif httperror.code == 401:
+                self.logger.error('error: not authorized')
+                raise DexcellRestApiError('INVALIDTOKEN', info['description'], info['moreInfo'])
+            else:
+                raise DexcellRestApiError('UNKNOWN', info['description'], info['moreInfo'])
+                self.logger.error('error: %s' % (str(httperror.code)))
+
+    def get_deployment(self, dep_id):
+        """ return dict with basic information from deployment number dep_id"""
+        url = "/deployments/%i.json" % dep_id
+        deployment = self._call_rest(url)
+        return deployment
+
+    def get_deployment_locations(self, dep_id):
+        """ return array with locations information from deployment number dep_id"""
+        url = "/deployments/%i/locations.json" % dep_id
+        location_list = self._call_rest(url)
+        return location_list
+
+    def get_deployment_devices(self, dep_id):
+        """ return array with devices information from deployment number dep_id"""
+        url = "/deployments/%i/devices.json" % dep_id
+        device_list = self._call_rest(url)
+        return device_list
+
+    def get_deployment_parameters(self, dep_id):
+        """ return array with parameters {freq, name, id, i18m, units}
+            from deployment number dep_id
+        """
+        url = "/deployments/%i/parameters.json" % dep_id
+        param_list = self._call_rest(url)
+        return param_list
+
+    def get_deployment_supplies(self, dep_id):
+        """ return array with supplies {pod, name, id}
+            from deployment number dep_id
+        """
+        url = "/deployments/%i/supplies.json" % dep_id
+        supply_list = self._call_rest(url)
+        return supply_list
+
+    def get_deployment_notices(self, dep_id, start, end):
+        """ return array with alerts information from deployment number dep_id
+            from the interval selected
+        """
+        start = self.dxdate(start)
+        end = self.dxdate(end)
+        url = "/deployments/%i/notices.json?start=%s&end=%s" % (dep_id, start, end)
+        notice_list = self._call_rest(url)
+        return notice_list
+
+    def get_deployment_parameter_devices(self, dep_id, param_nid):
+        """ return array with parameters {id, name, networkid}
+            from deployment number dep_id
+        """
+        url = "/deployments/%i/parameters/%s/devices.json" % (dep_id, str(param_nid))
+        device_list = self._call_rest(url)
+        return device_list
+
+    def set_deployment_thing(self, dep_id, key, value):
+        """ update dict of information saved by the user"""
+        url = "/deployments/%i/things/set/%s.json" % (dep_id, key)
+        payload = json.dumps(value, default=self._json_date_handler)
+        data = self._call_rest(url, payload=payload, parse_response=False)
+        return data
+
+    def get_deployment_thing(self, dep_id, key):
+        """ return dict of information saved by the user"""
+        url = "/deployments/%i/things/get/%s.json" % (dep_id, key)
+        data = self._call_rest(url, parse_response=False)
+        self.logger.info('dep_thing:%s' % str(data))
+        data = json.loads(data, object_hook=self._datetime_parser)
+        return data
+
+    def get_location(self, loc_id):
+        """ return dict with basic information from locat"""
+        url = "/locations/%i.json" % loc_id
+        location = self._call_rest(url)
+        return location
+
+    def get_location_parameters(self, loc_id):
+        """ return array with parameters {freq, name, id, i18m, units}
+            from location number loc_id
+        """
+        url = "/locations/%i/parameters.json" % loc_id
+        param_list = self._call_rest(url)
+        return param_list
+
+    def get_location_notices(self, loc_id, start, end):
+        """ return array with alerts information for location number loc_id
+            from the interval selected
+        """
+        start = self.dxdate(start)
+        end = self.dxdate(end)
+        url = "/locations/%i/notices.json?start=%s&end=%s" % (loc_id, start, end)
+        notice_list = self._call_rest(url)
+        return notice_list
+
+    def get_location_comments(self, loc_id, start, end):
+        """ return array with comments information for location number loc_id
+            from the interval selected
+        """
+        start = self.dxdate(start)
+        end = self.dxdate(end)
+        url = "/locations/%i/comments.json?start=%s&end=%s" % (loc_id, start, end)
+        comments = self._call_rest(url)
+        return comments
+
+    def get_location_parameter_devices(self, loc_id, param_nid):
+        """ return array with parameters {id, name, networkid}
+            from location number loc_id
+        """
+        url = "/locations/%i/parameters/%i/devices.json" % (loc_id, param_nid)
+        device_list = self._call_rest(url)
+        return device_list
+
+    def get_location_supplies(self, loc_id):
+        """ return array with supplies {pod, name, id}
+            from location number loc_id
+        """
+        url = "/locations/%i/supplies.json" % loc_id
+        supply_list = self._call_rest(url)
+        return supply_list
+
+    def get_location_devices(self, loc_id):
+        """ return array with the devices from the location """
+        url = "/locations/%i/devices.json" % loc_id
+        device_list = self._call_rest(url)
+        return device_list
+
+    def get_device(self, dev_id):
+        """ return dict with information for the device """
+        url = "/devices/%i.json" % dev_id
+        device = self._call_rest(url)
+        return device
+
+    def get_device_parameters(self, dev_id):
+        """ return array with parameters {freq, name, id, i18m, units}
+            from device number dev_id
+        """
+        param_list = self._call_rest("/devices/" + str(dev_id) + "/parameters.json")
+        return param_list
+
+    def get_simulated_bill(self, dev_id, start, end, type_param="ELECTRICAL", parameters="AAANNN", pod=None, time='HOUR'):
+        ''' returns bill generated from data in dexcell
+            Parameters
+                A : RAW + SUMMARY
+                R: RAW set of datas returned by time mesure, default hour
+                S: SUMMARY resum of data: totals, periods...
+                N: nothing
+            type_param can be ELECTRICAL, WATER, GAS
+        '''
+        new_pod = ''
+        if pod is not None:
+            new_pod = "&pod=" + pod
+        start = start.strftime("%Y%m%d%H%M%S")
+        end = end.strftime("%Y%m%d%H%M%S")
+        url = ["/cost/%i/%s.json?start=%s" % (dev_id, type_param, start)]
+        url.append("&end=%s&applyPattern=%s&period=%s%s" % (end, parameters, time, new_pod))
+        url = "".join(url)
+        bill = self._call_rest(url)
+        return bill
+
+    def get_supply_bills(self, sup_id, start, end, type_param='ELECTRICAL', parameters="AAANNN", pod=None, time='HOUR'):
+        ''' returns bills updated by the customer
+            Parameters
+                A : RAW + SUMMARY
+                R: RAW set of datas returned by time mesure, default hour
+                S: SUMMARY resum of data: totals, periods...
+                N: nothing
+            type_param can be ELECTRICAL, WATER, GAS
+        '''
+        new_pod = ''
+        if pod is not None:
+            new_pod = "&pod=" + pod
+        start = start.strftime("%Y%m%d%H%M%S")
+        end = end.strftime("%Y%m%d%H%M%S")
+        url = ["/cost/%i/bills/%s.json?start=%s" % (sup_id, type_param, start)]
+        url.append("&end=%s&applyPattern=%s&period=%s%s" % (end, parameters, time, new_pod))
+        url = "".join(url)
+        bills = self._call_rest(url)
+        return bills
+
+    def get_session(self, session_id):
+        """ return the session for an app with a concret session_id"""
+        url = "/session/%s.json" % session_id
+        response = self._call_rest(url)
+        self.logger.info('get session: ' + str(response))
+        return response
+
+    def get_readings(self, dev_id, s_nid, start, end):
+        """ return array dict with {values, timestamp} """
+        start = self.dxdate(start)
+        end = self.dxdate(end)
+        url = "/devices/%i/%i/readings.json?start=%s&end=%s" % (dev_id, s_nid, start, end)
+        readings = self._call_rest(url)
+        for i in range(0, len(readings)):
+            try:
+                readings[i]['ts'] = datetime.strptime(readings[i]['ts'], "%Y-%m-%d %H:%M:%S")
+                readings[i]['tsutc'] = datetime.strptime(readings[i]['tsutc'], "%Y-%m-%d %H:%M:%S")
+            except KeyError:
+                pass
+        return readings
+
+    def get_readings_new(self, dev_id, param, frequency, operation, start, end):
+        """ returns array of dict of values from the device dev_id with
+            parameter param with a frequency in the interval start - end.
+        """
+        start = self.dxdate(start)
+        end = self.dxdate(end)
+        url = ["/devices/%i/%s/readings.json?" % (dev_id, str(param))]
+        url.append("start=%s&end=%s&frequency=%s&operation=%s" % (start, end, str(frequency), str(operation)))
+        url = "".join(url)
+        readings = self._call_rest(url)
+        for i in range(0, len(readings)):
+            try:
+                readings[i]['ts'] = datetime.strptime(readings[i]['ts'], "%Y-%m-%d %H:%M:%S")
+                readings[i]['tsutc'] = datetime.strptime(readings[i]['tsutc'], "%Y-%m-%d %H:%M:%S")
+            except KeyError:
+                pass
+        return readings
+
+    def get_cost(self, nid, start, end, energy_type='ELECTRICAL', period='HOUR', grouped=False):
+        """ return array from cost and consumption with timestamp"""
+        str_grouped = 'TRUE'
+        if not grouped:
+            str_grouped = 'FALSE'
+        start = self.dxdate(start)
+        end = self.dxdate(end)
+        url = ["/devices/%i/%s/cost.json?" % (nid, energy_type)]
+        url.append("start=%s&end=%s&period=%s&grouped=%s" % (start, end, str(period), str_grouped))
+        url = "".join(url)
+        raw_response = self._call_rest(url)
+        try:
+            readings = raw_response['readings']
+            for i in range(0, len(readings)):
+                readings[i]['ts'] = datetime.strptime(readings[i]['ts'], "%Y/%m/%d %H:%M:%S")
+            periods = raw_response['periods']
+            return readings, periods
+        except KeyError:
+            return []
 
